@@ -68,9 +68,21 @@ class Labyrinth extends EventEmitter {
     return this;
   }
 
-  _initRoom(id) {
+  /**
+  * Get room from roomLookup
+  */
+
+  _getRoom(id) {
+    if (this.roomLookup.hasOwnProperty(id)) {
+      return this.roomLookup[id];
+    }
     let room = new Room(id);
     this.roomLookup[id] = room;
+    return room;
+  }
+
+  _initRoom(id) {
+    this._getRoom(id);
     this._addTask(id);
     return this;
   }
@@ -109,7 +121,6 @@ class Labyrinth extends EventEmitter {
               if (err) return reject(err);
               self._validateParams(data, (err) => {
                 if (err) return reject(err);
-                console.log(data);
                 const {roomId, drones} = data;
                 self._initRoom(roomId)._initDrones(drones);
                 resolve();
@@ -184,17 +195,6 @@ class Labyrinth extends EventEmitter {
   }
 
   /**
-  * Get room from roomLookup
-  */
-
-  _getRoom(id) {
-    if (this.roomLookup.hasOwnProperty(id)) {
-      return this.roomLookup[id];
-    }
-    return new Room(id);
-  }
-
-  /**
   * Mark room as visited
   */
 
@@ -208,6 +208,7 @@ class Labyrinth extends EventEmitter {
 
   /**
   * Parse data after explore/read request
+  * Process invalid commands if it exceeds the limit which is 5 for now.
   */
 
   _processResponseAfterExplore(postData, data) {
@@ -288,10 +289,9 @@ class Labyrinth extends EventEmitter {
           if (res.statusCode === 200) {
             self._parseBody(rawData, (err, data) => {
               if (err) return reject(err);
-              self._putDroneBack(drone);
               self._processResponseAfterExplore(postData, data);
-              console.log(self.tasks);
-              console.log(self.visitedRooms);
+              self.stats();
+              self._putDroneBack(drone);
               resolve();
             });
           } else if (res.statusCode === 404) {
@@ -330,17 +330,65 @@ class Labyrinth extends EventEmitter {
   }
 
   /**
+  * Log status of progress
+  */
+
+  stats() {
+    console.log(`Drones: ${this.drones.length}`);
+    console.log(`Total tasks: ${this.tasks.length}`);
+    console.log(`Visited rooms: ${this.visitedRooms.size}`);
+    console.log(`roomLookup keys: ${Object.keys(this.roomLookup).length}`);
+    return this;
+  }
+
+  /**
+  * Check all rooms are searched
+  */
+
+  _searchDone() {
+    return Object.keys(this.roomLookup).length === this.visitedRooms.size;
+  }
+
+  /**
   * Search Algorithm that searches all rooms
   * Similar to BFS/DFS but async.
   */
 
   search() {
+    const self = this;
+
     return new Promise((resolve, reject) => {
-      let drone = this.drones.pop();
-      this.explore.then(function(result) {
+      this.on('newTask', () => {
+        if (this.drones.length > 0) {
+          self.explore().then(function(result) {
+            if (self._searchDone()) {
+              resolve();
+            }
+          }).catch(function(err) {
+            // TODO: handle errs like drone is busy or invalid
+            // on network error, reject
+            //reject(err);
+          });
+        }
+      });
 
+      this.on('droneBack', () => {
+        if (this.tasks.length > 0) {
+          this.explore().then(function(result) {
+            if (self._searchDone()) {
+              resolve();
+            }
+          }).catch(function(err) {
+            // TODO: handle errs like drone is busy or invalid
+            // on network error, reject
+            //reject(err);
+          });
+        }
+      });
+
+      this.explore().then(function(result) {
       }).catch(function(err) {
-
+        //reject(err);
       });
     });
   }

@@ -7,16 +7,16 @@ const Labyrinth = require('../modules/Labyrinth');
 router.post('/start', function(req, res, next) {
 
   const commander = req.body.commander || "test@test.com";
-  const labyrinth = new Labyrinth(commander);
+  const maxCommand = req.body.maxCommand;
+  const labyrinth = new Labyrinth(commander, maxCommand);
 
   labyrinth.start().then(function() {
-
-    labyrinth.explore().then(function() {
+    labyrinth.search().then(function() {
       res.send({ok:true});
     }).catch(function(err) {
       next(err);
     });
-    
+
   }).catch(function(err) {
     next(err);
   });
