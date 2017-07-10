@@ -12,13 +12,17 @@ router.post('/start', function(req, res, next) {
 
   labyrinth.start().then(function() {
     labyrinth.search().then(function() {
-      let now = new Date();
-      let diff = now - req.startTime;
-      res.send({ok:true, timer: diff});
+      labyrinth.report().then(function(data) {
+        let now = new Date();
+        let diff = now - req.startTime;
+        Object.assign(data, {timer: diff});
+        res.send(data);
+      }).catch(function(err) {
+        next(err);
+      });
     }).catch(function(err) {
       next(err);
     });
-
   }).catch(function(err) {
     next(err);
   });

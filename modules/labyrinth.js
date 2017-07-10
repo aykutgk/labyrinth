@@ -221,6 +221,9 @@ class Labyrinth extends EventEmitter {
         if ('writing' in data[key] && 'order' in data[key]) {
           room.writing = data[key];
         }
+        if ('error' in data[key]) {
+          self._putTasksBack({[key]: postData[key]});
+        }
         self._setRoomVisited(room);
       } else {
         let room = self._getRoom(key);
@@ -232,6 +235,9 @@ class Labyrinth extends EventEmitter {
             let innerRoom = self._getRoom(id);
             room.connections.push(innerRoom);
           });
+        }
+        if ('error' in data[key]) {
+          self._putTasksBack({[key]: postData[key]});
         }
         self._setRoomVisited(room);
       }
@@ -346,7 +352,82 @@ class Labyrinth extends EventEmitter {
   */
 
   _searchDone() {
-    return Object.keys(this.roomLookup).length === this.visitedRooms.size;
+    return Object.keys(this.roomLookup).length === this.visitedRooms.size && this.tasks.length === 0;
+  }
+
+  /**
+  * Get writings from rooms and combine them
+  */
+  _getMessage() {
+    // let writings = [];
+    // for (let room of this.visitedRooms) {
+    //   if (room.writing.order !== -1) {
+    //     writings.push({writing: room.writing.writing, order: room.writing.order});
+    //   }
+    // }
+    let writings = [...this.visitedRooms].filter((room) => room.writing.order !== -1);
+    writings.sort((a, b) => a.writing.order - b.writing.order);
+    return writings.map((i) => i.writing.writing).join('');
+  }
+
+  /**
+  * Report the message
+  */
+
+  report () {
+    const self = this;
+
+    const options = {
+      hostname: 'challenge2.airtime.com',
+      port: '10001',
+      path: '/report',
+      method: 'POST',
+      headers: {
+        'x-commander-email': `${this.commander}`,
+        'Content-Type': 'application/json',
+      },
+    };
+
+    const message = this._getMessage();
+    const postData = {
+      message: message,
+    }
+
+    return new Promise((resolve, reject) => {
+
+      const req = http.request(options, (res) => {
+
+        let rawData = '';
+        res.on('data', (chunk) => {
+          rawData += chunk;
+        });
+
+        res.on('end', () => {
+          self._parseBody(rawData, (err, data) => {
+            if (err) return reject({err: err.message});
+            if (res.statusCode === 400) {
+              resolve(data);
+            } else if (res.statusCode === 200) {
+              resolve(data);
+            } else {
+              let err = new Error('Something went wrong!');
+              reject({err: err.message});
+            }
+          });
+        });
+
+      });
+
+      req.on('error', (err) => {
+        reject({err: err.message});
+      });
+
+      req.write(JSON.stringify(postData));
+
+      req.end();
+
+    });
+
   }
 
   /**
@@ -362,6 +443,7 @@ class Labyrinth extends EventEmitter {
         if (this.drones.length > 0) {
           self.explore().then(function(result) {
             if (self._searchDone()) {
+              self.report();
               resolve();
             }
           }).catch(function(err) {
@@ -376,6 +458,7 @@ class Labyrinth extends EventEmitter {
         if (this.tasks.length > 0) {
           this.explore().then(function(result) {
             if (self._searchDone()) {
+              self.report();
               resolve();
             }
           }).catch(function(err) {
@@ -391,10 +474,6 @@ class Labyrinth extends EventEmitter {
         //reject(err);
       });
     });
-  }
-
-  report () {
-    throw new Error('Not implemented');
   }
 }
 
