@@ -14,6 +14,12 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+app.use((req, res, next) => {
+  let now = new Date();
+  req.startTime = now;
+  next();
+})
+
 app.use('/', index);
 
 // catch 404 and forward to error handler
